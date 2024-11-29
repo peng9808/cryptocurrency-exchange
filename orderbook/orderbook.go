@@ -41,7 +41,7 @@ func NewOrder(bid bool, size float64, userID int64) *Order {
 }
 
 func (o *Order) String() string {
-	return fmt.Sprintf("[size: %.2f]", o.Size)
+	return fmt.Sprintf("[size: %.2f] | [id: %d]", o.Size, o.ID)
 }
 
 func (o *Order) IsFilled() bool {
@@ -189,7 +189,7 @@ func (ob *Orderbook) PlaceMarketOrder(o *Order) []Match {
 			matches = append(matches, limitMatches...)
 
 			if len(limit.Orders) == 0 {
-				ob.clearLimit(true, limit)
+				ob.clearLimit(false, limit)
 			}
 
 		}
@@ -257,6 +257,8 @@ func (ob *Orderbook) clearLimit(bid bool, l *Limit) {
 			}
 		}
 	}
+
+	fmt.Printf("clearing limit price level [%.2f]\n", l.Price)
 }
 
 func (ob *Orderbook) CancelOrder(o *Order) {
