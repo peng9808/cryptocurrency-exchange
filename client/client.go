@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/peng9808/cryptocurrency-exchange/orderbook"
 	"github.com/peng9808/cryptocurrency-exchange/server"
 )
 
@@ -27,6 +28,26 @@ func NewClient() *Client {
 	return &Client{
 		Client: http.DefaultClient,
 	}
+}
+
+func (c *Client) GetTrades(market string) ([]*orderbook.Trade, error) {
+	e := fmt.Sprintf("%s/trades/%s", Endpoint, market)
+	req, err := http.NewRequest(http.MethodGet, e, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	trades := []*orderbook.Trade{}
+	if err := json.NewDecoder(resp.Body).Decode(&trades); err != nil {
+		return nil, err
+	}
+
+	return trades, nil
 }
 
 func (c *Client) GetOrders(userID int64) (*server.GetOrdersResponse, error) {
@@ -80,7 +101,6 @@ func (c *Client) PlaceMarketOrder(p *PlaceOrderParams) (*server.PlaceOrderRespon
 	}
 
 	return placeOrderResponse, nil
-
 }
 
 func (c *Client) GetBestAsk() (float64, error) {
@@ -139,6 +159,10 @@ func (c *Client) CancelOrder(orderID int64) error {
 }
 
 func (c *Client) PlaceLimitOrder(p *PlaceOrderParams) (*server.PlaceOrderResponse, error) {
+	if p.Size == 0.0 {
+		return nil, fmt.Errorf("size cannot be 0 when placing a limit order")
+	}
+
 	params := &server.PlaceOrderRequest{
 		UserID: p.UserID,
 		Type:   server.LimitOrder,

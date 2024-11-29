@@ -6,7 +6,16 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
+
+type Trade struct {
+	Price     float64
+	Size      float64
+	Bid       bool
+	Timestamp int64
+}
 
 type Match struct {
 	Ask        *Order
@@ -42,6 +51,13 @@ func NewOrder(bid bool, size float64, userID int64) *Order {
 
 func (o *Order) String() string {
 	return fmt.Sprintf("[size: %.2f] | [id: %d]", o.Size, o.ID)
+}
+
+func (o *Order) Type() string {
+	if o.Bid {
+		return "BID"
+	}
+	return "ASK"
 }
 
 func (o *Order) IsFilled() bool {
@@ -102,6 +118,10 @@ func (l *Limit) Fill(o *Order) []Match {
 	)
 
 	for _, order := range l.Orders {
+		if o.IsFilled() {
+			break
+		}
+
 		match := l.fillOrder(order, o)
 		matches = append(matches, match)
 
@@ -109,10 +129,6 @@ func (l *Limit) Fill(o *Order) []Match {
 
 		if order.IsFilled() {
 			ordersToDelete = append(ordersToDelete, order)
-		}
-
-		if o.IsFilled() {
-			break
 		}
 	}
 
@@ -160,6 +176,8 @@ type Orderbook struct {
 	asks []*Limit
 	bids []*Limit
 
+	Trades []*Trade
+
 	mu        sync.RWMutex
 	AskLimits map[float64]*Limit
 	BidLimits map[float64]*Limit
@@ -170,6 +188,7 @@ func NewOrderbook() *Orderbook {
 	return &Orderbook{
 		asks:      []*Limit{},
 		bids:      []*Limit{},
+		Trades:    []*Trade{},
 		AskLimits: make(map[float64]*Limit),
 		BidLimits: make(map[float64]*Limit),
 		Orders:    make(map[int64]*Order),
@@ -191,7 +210,6 @@ func (ob *Orderbook) PlaceMarketOrder(o *Order) []Match {
 			if len(limit.Orders) == 0 {
 				ob.clearLimit(false, limit)
 			}
-
 		}
 	} else {
 		if o.Size > ob.BidTotalVolume() {
@@ -206,6 +224,16 @@ func (ob *Orderbook) PlaceMarketOrder(o *Order) []Match {
 				ob.clearLimit(true, limit)
 			}
 		}
+	}
+
+	for _, match := range matches {
+		trade := &Trade{
+			Price:     match.Price,
+			Size:      match.SizeFilled,
+			Timestamp: time.Now().UnixNano(),
+			Bid:       o.Bid,
+		}
+		ob.Trades = append(ob.Trades, trade)
 	}
 
 	return matches
@@ -234,6 +262,13 @@ func (ob *Orderbook) PlaceLimitOrder(price float64, o *Order) {
 			ob.AskLimits[price] = limit
 		}
 	}
+
+	logrus.WithFields(logrus.Fields{
+		"price":  limit.Price,
+		"type":   o.Type(),
+		"size":   o.Size,
+		"userID": o.UserID,
+	}).Info("new limit order")
 
 	ob.Orders[o.ID] = o
 	limit.AddOrder(o)
@@ -265,6 +300,10 @@ func (ob *Orderbook) CancelOrder(o *Order) {
 	limit := o.Limit
 	limit.DeleteOrder(o)
 	delete(ob.Orders, o.ID)
+
+	if len(limit.Orders) == 0 {
+		ob.clearLimit(o.Bid, limit)
+	}
 }
 
 func (ob *Orderbook) BidTotalVolume() float64 {

@@ -7,6 +7,7 @@ toolchain go1.22.9
 require (
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/labstack/echo/v4 v4.12.0
+	github.com/sirupsen/logrus v1.9.3
 )
 
 require (
